@@ -13,8 +13,13 @@ int main(void)
 {
     Global_Init();
 
+    /* Palier 0 : vérifier que la chaîne compilation -> téléversement marche */
+    GroveRGB_Init();
+    GroveRGB_SetColor(0, 255, 0);
+    printf("WWW : demarrage OK\r\n");
+
     while (1)
     {
-        
+
     }
 }
