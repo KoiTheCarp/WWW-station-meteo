@@ -8,18 +8,25 @@
 #include "grove_gps_air530z.h"
 #include "grove_bme680.h"
 #include "sd_logger.h"
+#include "boutons.h"
+#include "modes.h"
 
 int main(void)
 {
     Global_Init();
-
-    /* Palier 0 : vérifier que la chaîne compilation -> téléversement marche */
     GroveRGB_Init();
-    GroveRGB_SetColor(0, 255, 0);
-    printf("WWW : demarrage OK\r\n");
+    Boutons_Init();
+
+    printf("WWW : demarrage\r\n");
+
+    /* Diagramme d'activité : bouton rouge enfoncé au démarrage -> configuration, sinon standard */
+    Modes_Demarrer();
 
     while (1)
     {
+        /* Ne jamais bloquer ici : la boucle doit tourner vite pour voir les appuis de 5 s */
+        Modes_MettreAJour();
 
+        /* Palier 1 : la mesure toutes les LOG_INTERVAL viendra ici */
     }
 }
