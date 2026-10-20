@@ -1,0 +1,94 @@
+#include <stdio.h>
+#include "horloge.h"
+#include "grove_rtc_ds1307.h"
+#include "integer.h"
+
+static bool derniere_lecture_ok = true;
+
+/* Dernière date lue, pour dater les fichiers de la carte SD (get_fattime) */
+static RTC_DateTime derniere_date = { 0, 0, 0, 1, 1, 1, 2026 };
+
+void Horloge_Init(void)
+{
+    derniere_lecture_ok = GroveRTC_Init();
+    printf("RTC : %s\r\n", derniere_lecture_ok ? "prete" : "pas de reponse");
+}
+
+bool Horloge_Lire(RTC_DateTime *dt)
+{
+    derniere_lecture_ok = GroveRTC_GetDateTime(dt);
+    if (derniere_lecture_ok)
+    {
+        derniere_date = *dt;
+    }
+    return derniere_lecture_ok;
+}
+
+/* On relit la RTC, on change seulement les champs demandés, puis on réécrit tout */
+static bool Horloge_Modifier(RTC_DateTime *dt)
+{
+    if (!GroveRTC_GetDateTime(dt))
+    {
+        derniere_lecture_ok = false;
+        return false;
+    }
+    return true;
+}
+
+bool Horloge_RegleHeure(uint8_t heures, uint8_t minutes, uint8_t secondes)
+{
+    RTC_DateTime dt;
+
+    if (!Horloge_Modifier(&dt))
+    {
+        return false;
+    }
+    dt.hours = heures;
+    dt.minutes = minutes;
+    dt.seconds = secondes;
+    return GroveRTC_SetDateTime(&dt);
+}
+
+bool Horloge_RegleDate(uint8_t mois, uint8_t jour, uint16_t annee)
+{
+    RTC_DateTime dt;
+
+    if (!Horloge_Modifier(&dt))
+    {
+        return false;
+    }
+    dt.month = mois;
+    dt.day = jour;
+    dt.year = annee;
+    return GroveRTC_SetDateTime(&dt);
+}
+
+bool Horloge_RegleJour(uint8_t jour_semaine)
+{
+    RTC_DateTime dt;
+
+    if (!Horloge_Modifier(&dt))
+    {
+        return false;
+    }
+    dt.dayOfWeek = jour_semaine;
+    return GroveRTC_SetDateTime(&dt);
+}
+
+Erreur Horloge_Erreur(void)
+{
+    return derniere_lecture_ok ? ERREUR_AUCUNE : ERREUR_RTC;
+}
+
+/*
+ * Appelée par FatFs pour dater les fichiers créés ou modifiés.
+ * Format imposé : année depuis 1980, mois, jour, heures, minutes, secondes / 2.
+ */
+DWORD get_fattime(void)
+{
+    const RTC_DateTime *d = &derniere_date;
+    uint32_t annee = (d->year >= 1980U) ? (d->year - 1980U) : 0U;
+
+    return (annee << 25) | ((uint32_t)d->month << 21) | ((uint32_t)d->day << 16)
+         | ((uint32_t)d->hours << 11) | ((uint32_t)d->minutes << 5) | ((uint32_t)d->seconds >> 1);
+}
