@@ -111,7 +111,11 @@ static void Mesures_Afficher(Mode mode)
     {
         const Capteur *c = &capteurs[i];
 
-        if (c->valide)
+        if (c->valide && c->unite[0] == '\0')
+        {
+            printf("  %s %.0f", c->nom, c->valeur);     /* lumière : valeur brute, sans unité */
+        }
+        else if (c->valide)
         {
             printf("  %s %.1f %s", c->nom, c->valeur, c->unite);
         }
