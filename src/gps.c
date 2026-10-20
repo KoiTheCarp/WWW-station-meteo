@@ -6,7 +6,6 @@
 
 extern UART_HandleTypeDef GPS_UART_HANDLE;     /* liaison série du GPS, créée dans grove_gps_air530z.c */
 
-#define GPS_SILENCE_MAX_MS  3000U   /* le module envoie une trame par seconde : 3 s sans rien = muet */
 #define TAILLE_LIGNE        100U    /* une trame NMEA fait au plus 82 caractères */
 #define NB_CHAMPS_GGA       15
 
@@ -119,7 +118,7 @@ static double Gps_EnDegres(const char *valeur, char hemisphere)
     return (hemisphere == 'S' || hemisphere == 'W') ? -resultat : resultat;
 }
 
-EtatGps Gps_Lire(double *latitude, double *longitude)
+EtatGps Gps_Lire(double *latitude, double *longitude, uint32_t silence_max_ms)
 {
     char ligne[TAILLE_LIGNE];
     bool recue;
@@ -134,7 +133,7 @@ EtatGps Gps_Lire(double *latitude, double *longitude)
     }
     __enable_irq();
 
-    if (!recue || silence_ms > GPS_SILENCE_MAX_MS)
+    if (!recue || silence_ms > silence_max_ms)
     {
         return GPS_MUET;
     }
