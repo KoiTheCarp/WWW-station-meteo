@@ -24,6 +24,9 @@ extern I2C_HandleTypeDef hi2c1;     /* bus I2C créé dans setup.c */
 /* 2 lectures ratées d'affilée = capteur en erreur (commande TIMEOUT de la spécification) */
 #define NB_ECHECS_ERREUR  2U
 
+/* Mode maintenance : données affichées en direct, une mesure toutes les 2 s */
+#define MAINTENANCE_PERIODE_MS  2000U
+
 #define LUMIERE_ERREUR  0xFFFFU     /* valeur renvoyée par GroveLight_ReadRaw si la lecture rate */
 
 /* Tout ce qu'il faut savoir sur un capteur, regroupé dans une structure */
@@ -115,7 +118,18 @@ static void Mesures_Lire(void)
 /* Affiche la mesure sur le port série (plus tard : écriture de la ligne sur la SD) */
 static void Mesures_Afficher(Mode mode)
 {
-    printf("Mesure (%s) :", (mode == MODE_ECONOMIQUE) ? "ECONOMIQUE" : "STANDARD");
+    const char *nom_mode = "STANDARD";
+
+    if (mode == MODE_ECONOMIQUE)
+    {
+        nom_mode = "ECONOMIQUE";
+    }
+    else if (mode == MODE_MAINTENANCE)
+    {
+        nom_mode = "MAINTENANCE";
+    }
+
+    printf("Mesure (%s) :", nom_mode);
 
     for (int i = 0; i < NB_CAPTEURS; i++)
     {
@@ -164,8 +178,13 @@ void Mesures_MettreAJour(Mode mode)
             intervalle_ms = 2U * LOG_INTERVAL_DEFAUT * UNITE_INTERVALLE_MS;
             break;
 
+        case MODE_MAINTENANCE:
+            /* Spécification : plus d'écriture sur la SD, données en direct sur le port série */
+            intervalle_ms = MAINTENANCE_PERIODE_MS;
+            break;
+
         default:
-            /* Configuration : acquisition coupée. Maintenance : affichage en direct à venir */
+            /* Configuration : acquisition coupée */
             return;
     }
 

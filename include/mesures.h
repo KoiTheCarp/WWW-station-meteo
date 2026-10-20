@@ -8,8 +8,9 @@ void Mesures_Init(void);
 
 /*
  * À appeler à chaque tour de la boucle principale.
- * Fait une mesure quand LOG_INTERVAL est écoulé (x2 en mode économique),
- * sans jamais bloquer la boucle. Rien en mode configuration.
+ * Fait une mesure quand LOG_INTERVAL est écoulé (x2 en mode économique,
+ * toutes les 2 s en maintenance), sans jamais bloquer la boucle.
+ * Rien en mode configuration.
  */
 void Mesures_MettreAJour(Mode mode);
 
