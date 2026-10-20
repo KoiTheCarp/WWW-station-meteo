@@ -11,6 +11,7 @@
 #include "boutons.h"
 #include "modes.h"
 #include "mesures.h"
+#include "led.h"
 
 int main(void)
 {
@@ -29,7 +30,12 @@ int main(void)
         /* Ne jamais bloquer ici : la boucle doit tourner vite pour voir les appuis de 5 s */
         Modes_MettreAJour();
 
+        Mode mode = Modes_Courant();
+
         /* Palier 1 : une mesure toutes les LOG_INTERVAL (sans bloquer) */
-        Mesures_MettreAJour(Modes_Courant());
+        Mesures_MettreAJour(mode);
+
+        /* LED : clignotement d'erreur, sauf en configuration où il n'y a pas de mesure */
+        Led_MettreAJour(mode, (mode == MODE_CONFIGURATION) ? ERREUR_AUCUNE : Mesures_Erreur());
     }
 }

@@ -27,6 +27,15 @@ extern I2C_HandleTypeDef hi2c1;     /* bus I2C créé dans setup.c */
 /* Mode maintenance : données affichées en direct, une mesure toutes les 2 s */
 #define MAINTENANCE_PERIODE_MS  2000U
 
+/*
+ * Seuils par défaut de la spécification : en dehors, les données sont incohérentes.
+ * Humidité et lumière n'en ont pas (HYGR_MINT/MAXT et LUMIN_LOW/HIGH servent à autre chose).
+ */
+#define MIN_TEMP_AIR_DEFAUT    (-10.0f)
+#define MAX_TEMP_AIR_DEFAUT    60.0f
+#define PRESSURE_MIN_DEFAUT    850.0f
+#define PRESSURE_MAX_DEFAUT    1080.0f
+
 #define LUMIERE_ERREUR  0xFFFFU     /* valeur renvoyée par GroveLight_ReadRaw si la lecture rate */
 
 /* Tout ce qu'il faut savoir sur un capteur, regroupé dans une structure */
@@ -37,6 +46,9 @@ typedef struct
     float valeur;           /* dernière valeur lue */
     bool valide;            /* la dernière lecture a-t-elle réussi ? sinon on affiche NA */
     uint8_t nb_echecs;      /* lectures ratées d'affilée */
+    bool a_seuils;          /* le capteur a-t-il un minimum et un maximum ? */
+    float min;
+    float max;
 } Capteur;
 
 enum
@@ -50,10 +62,10 @@ enum
 
 static Capteur capteurs[NB_CAPTEURS] =
 {
-    { "Temperature", "C",   0.0f, false, 0U },
-    { "Humidite",    "%",   0.0f, false, 0U },
-    { "Pression",    "hPa", 0.0f, false, 0U },
-    { "Lumiere",     "",    0.0f, false, 0U },
+    { "Temperature", "C",   0.0f, false, 0U, true,  MIN_TEMP_AIR_DEFAUT, MAX_TEMP_AIR_DEFAUT },
+    { "Humidite",    "%",   0.0f, false, 0U, false, 0.0f, 0.0f },
+    { "Pression",    "hPa", 0.0f, false, 0U, true,  PRESSURE_MIN_DEFAUT, PRESSURE_MAX_DEFAUT },
+    { "Lumiere",     "",    0.0f, false, 0U, false, 0.0f, 0.0f },
 };
 
 static BME280_Handle bme280;
@@ -61,6 +73,12 @@ static bool bme280_pret = false;
 
 static uint32_t derniere_mesure_ms = 0U;
 static bool premiere_mesure = true;     /* la toute première mesure se fait tout de suite */
+
+/* Valeur lue mais en dehors des seuils : données incohérentes */
+static bool Capteur_HorsSeuils(const Capteur *c)
+{
+    return c->valide && c->a_seuils && (c->valeur < c->min || c->valeur > c->max);
+}
 
 /* Met à jour un capteur après une lecture, réussie ou non */
 static void Capteur_Noter(Capteur *c, bool reussie, float valeur)
@@ -142,6 +160,10 @@ static void Mesures_Afficher(Mode mode)
         else if (c->valide)
         {
             printf("  %s %.1f %s", c->nom, c->valeur, c->unite);
+            if (Capteur_HorsSeuils(c))
+            {
+                printf(" (hors seuils)");
+            }
         }
         else
         {
@@ -153,6 +175,26 @@ static void Mesures_Afficher(Mode mode)
         }
     }
     printf("\r\n");
+}
+
+Erreur Mesures_Erreur(void)
+{
+    /* Un capteur qui ne répond plus passe avant des données incohérentes */
+    for (int i = 0; i < NB_CAPTEURS; i++)
+    {
+        if (capteurs[i].nb_echecs >= NB_ECHECS_ERREUR)
+        {
+            return ERREUR_CAPTEUR;
+        }
+    }
+    for (int i = 0; i < NB_CAPTEURS; i++)
+    {
+        if (Capteur_HorsSeuils(&capteurs[i]))
+        {
+            return ERREUR_DONNEES_INCOHERENTES;
+        }
+    }
+    return ERREUR_AUCUNE;
 }
 
 void Mesures_Init(void)

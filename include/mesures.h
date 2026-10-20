@@ -2,6 +2,7 @@
 #define MESURES_H
 
 #include "modes.h"
+#include "led.h"
 
 /* Prépare les capteurs (BME280 et lumière). À appeler une fois au démarrage */
 void Mesures_Init(void);
@@ -13,5 +14,8 @@ void Mesures_Init(void);
  * Rien en mode configuration.
  */
 void Mesures_MettreAJour(Mode mode);
+
+/* Erreur à signaler d'après la dernière mesure : capteur en erreur, données hors seuils, ou aucune */
+Erreur Mesures_Erreur(void);
 
 #endif
