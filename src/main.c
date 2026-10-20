@@ -10,12 +10,14 @@
 #include "sd_logger.h"
 #include "boutons.h"
 #include "modes.h"
+#include "mesures.h"
 
 int main(void)
 {
     Global_Init();
     GroveRGB_Init();
     Boutons_Init();
+    Mesures_Init();
 
     printf("WWW : demarrage\r\n");
 
@@ -27,6 +29,7 @@ int main(void)
         /* Ne jamais bloquer ici : la boucle doit tourner vite pour voir les appuis de 5 s */
         Modes_MettreAJour();
 
-        /* Palier 1 : la mesure toutes les LOG_INTERVAL viendra ici */
+        /* Palier 1 : une mesure toutes les LOG_INTERVAL (sans bloquer) */
+        Mesures_MettreAJour(Modes_Courant());
     }
 }

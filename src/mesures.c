@@ -1,0 +1,169 @@
+#include <stdio.h>
+#include "stm32l4xx_hal.h"
+#include "mesures.h"
+#include "bme280.h"
+#include "grove_light.h"
+
+extern I2C_HandleTypeDef hi2c1;     /* bus I2C créé dans setup.c */
+
+/* LOG_INTERVAL de la spécification : 10 minutes par défaut */
+#define LOG_INTERVAL_DEFAUT  10U
+
+/*
+ * Pour tester sans attendre 10 min : à 1, LOG_INTERVAL compte en secondes
+ * au lieu de minutes (une mesure toutes les 10 s). Remettre à 0 pour le rendu.
+ */
+#define MESURES_TEST  1
+
+#if MESURES_TEST
+#define UNITE_INTERVALLE_MS  1000U
+#else
+#define UNITE_INTERVALLE_MS  (60U * 1000U)
+#endif
+
+/* 2 lectures ratées d'affilée = capteur en erreur (commande TIMEOUT de la spécification) */
+#define NB_ECHECS_ERREUR  2U
+
+#define LUMIERE_ERREUR  0xFFFFU     /* valeur renvoyée par GroveLight_ReadRaw si la lecture rate */
+
+/* Tout ce qu'il faut savoir sur un capteur, regroupé dans une structure */
+typedef struct
+{
+    const char *nom;
+    const char *unite;
+    float valeur;           /* dernière valeur lue */
+    bool valide;            /* la dernière lecture a-t-elle réussi ? sinon on affiche NA */
+    uint8_t nb_echecs;      /* lectures ratées d'affilée */
+} Capteur;
+
+enum
+{
+    CAPTEUR_TEMPERATURE = 0,
+    CAPTEUR_HUMIDITE,
+    CAPTEUR_PRESSION,
+    CAPTEUR_LUMIERE,
+    NB_CAPTEURS
+};
+
+static Capteur capteurs[NB_CAPTEURS] =
+{
+    { "Temperature", "C",   0.0f, false, 0U },
+    { "Humidite",    "%",   0.0f, false, 0U },
+    { "Pression",    "hPa", 0.0f, false, 0U },
+    { "Lumiere",     "",    0.0f, false, 0U },
+};
+
+static BME280_Handle bme280;
+static bool bme280_pret = false;
+
+static uint32_t derniere_mesure_ms = 0U;
+static bool premiere_mesure = true;     /* la toute première mesure se fait tout de suite */
+
+/* Met à jour un capteur après une lecture, réussie ou non */
+static void Capteur_Noter(Capteur *c, bool reussie, float valeur)
+{
+    if (reussie)
+    {
+        c->valeur = valeur;
+        c->valide = true;
+        c->nb_echecs = 0U;
+    }
+    else
+    {
+        c->valide = false;
+        if (c->nb_echecs < 255U)
+        {
+            c->nb_echecs++;
+        }
+    }
+}
+
+/* Lit tous les capteurs une fois */
+static void Mesures_Lire(void)
+{
+    BME280_Data env = {0};
+    bool env_ok = false;
+
+    /* Si le BME280 n'a pas répondu au démarrage, on retente à chaque mesure */
+    if (!bme280_pret)
+    {
+        bme280_pret = BME280_Init(&bme280, &hi2c1);
+    }
+    if (bme280_pret)
+    {
+        env_ok = BME280_Read(&bme280, &env);
+    }
+
+    Capteur_Noter(&capteurs[CAPTEUR_TEMPERATURE], env_ok, env.temperature_c);
+    Capteur_Noter(&capteurs[CAPTEUR_HUMIDITE],    env_ok, env.humidity_percent);
+    Capteur_Noter(&capteurs[CAPTEUR_PRESSION],    env_ok, env.pressure_hpa);
+
+    uint16_t lumiere = GroveLight_ReadRaw();
+    Capteur_Noter(&capteurs[CAPTEUR_LUMIERE], lumiere != LUMIERE_ERREUR, (float)lumiere);
+}
+
+/* Affiche la mesure sur le port série (plus tard : écriture de la ligne sur la SD) */
+static void Mesures_Afficher(Mode mode)
+{
+    printf("Mesure (%s) :", (mode == MODE_ECONOMIQUE) ? "ECONOMIQUE" : "STANDARD");
+
+    for (int i = 0; i < NB_CAPTEURS; i++)
+    {
+        const Capteur *c = &capteurs[i];
+
+        if (c->valide)
+        {
+            printf("  %s %.1f %s", c->nom, c->valeur, c->unite);
+        }
+        else
+        {
+            printf("  %s NA", c->nom);
+            if (c->nb_echecs >= NB_ECHECS_ERREUR)
+            {
+                printf(" (erreur)");
+            }
+        }
+    }
+    printf("\r\n");
+}
+
+void Mesures_Init(void)
+{
+    GroveLight_Init();
+
+    bme280_pret = BME280_Init(&bme280, &hi2c1);
+    printf("BME280 : %s\r\n", bme280_pret ? "pret" : "pas de reponse");
+}
+
+void Mesures_MettreAJour(Mode mode)
+{
+    uint32_t intervalle_ms;
+
+    switch (mode)
+    {
+        case MODE_STANDARD:
+            intervalle_ms = LOG_INTERVAL_DEFAUT * UNITE_INTERVALLE_MS;
+            break;
+
+        case MODE_ECONOMIQUE:
+            /* Spécification : LOG_INTERVAL multiplié par 2 en mode économique */
+            intervalle_ms = 2U * LOG_INTERVAL_DEFAUT * UNITE_INTERVALLE_MS;
+            break;
+
+        default:
+            /* Configuration : acquisition coupée. Maintenance : affichage en direct à venir */
+            return;
+    }
+
+    /* On compare des durées (et pas des heures) : ça reste juste quand HAL_GetTick repasse à 0 */
+    if (!premiere_mesure && (HAL_GetTick() - derniere_mesure_ms) < intervalle_ms)
+    {
+        return;
+    }
+
+    premiere_mesure = false;
+    derniere_mesure_ms = HAL_GetTick();
+
+    Mesures_Lire();
+    Mesures_Afficher(mode);
+}
