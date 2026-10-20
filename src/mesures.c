@@ -94,6 +94,16 @@ static void Mesures_Lire(void)
         env_ok = BME280_Read(&bme280, &env);
     }
 
+    /*
+     * Lecture ratée : le capteur a peut-être été débranché, donc éteint.
+     * Rebranché, il repart avec ses réglages d'usine (humidité non mesurée) :
+     * il faut refaire BME280_Init, ce qui se fera à la prochaine mesure.
+     */
+    if (!env_ok)
+    {
+        bme280_pret = false;
+    }
+
     Capteur_Noter(&capteurs[CAPTEUR_TEMPERATURE], env_ok, env.temperature_c);
     Capteur_Noter(&capteurs[CAPTEUR_HUMIDITE],    env_ok, env.humidity_percent);
     Capteur_Noter(&capteurs[CAPTEUR_PRESSION],    env_ok, env.pressure_hpa);
