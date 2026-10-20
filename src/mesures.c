@@ -3,6 +3,7 @@
 #include "mesures.h"
 #include "bme280.h"
 #include "grove_light.h"
+#include "gps.h"
 
 extern I2C_HandleTypeDef hi2c1;     /* bus I2C créé dans setup.c */
 
@@ -71,6 +72,19 @@ static Capteur capteurs[NB_CAPTEURS] =
 static BME280_Handle bme280;
 static bool bme280_pret = false;
 
+/* Le GPS donne deux valeurs (latitude, longitude) : il a sa propre structure */
+typedef struct
+{
+    EtatGps etat;           /* résultat de la dernière lecture */
+    bool lu;                /* faux si on a sauté le GPS (mode économique) */
+    double latitude;
+    double longitude;
+    uint8_t nb_echecs;      /* lectures d'affilée où le module était muet */
+} PositionGps;
+
+static PositionGps position = { GPS_MUET, false, 0.0, 0.0, 0U };
+static uint32_t nb_mesures_eco = 0U;   /* pour ne lire le GPS qu'une mesure sur deux en mode économique */
+
 static uint32_t derniere_mesure_ms = 0U;
 static bool premiere_mesure = true;     /* la toute première mesure se fait tout de suite */
 
@@ -99,8 +113,45 @@ static void Capteur_Noter(Capteur *c, bool reussie, float valeur)
     }
 }
 
+/* Lit la position, sauf une mesure sur deux en mode économique (spécification) */
+static void Mesures_LireGps(Mode mode)
+{
+    if (mode == MODE_ECONOMIQUE)
+    {
+        nb_mesures_eco++;
+        if (nb_mesures_eco % 2U == 0U)
+        {
+            position.lu = false;
+            return;
+        }
+    }
+    else
+    {
+        nb_mesures_eco = 0U;   /* en entrant en mode éco, la première mesure lit le GPS */
+    }
+
+    position.lu = true;
+    position.etat = Gps_Lire(&position.latitude, &position.longitude);
+
+    /*
+     * Choix du groupe : seul un GPS muet compte comme une erreur.
+     * Sans position (à l'intérieur), on affiche NA sans faire clignoter la LED.
+     */
+    if (position.etat == GPS_MUET)
+    {
+        if (position.nb_echecs < 255U)
+        {
+            position.nb_echecs++;
+        }
+    }
+    else
+    {
+        position.nb_echecs = 0U;
+    }
+}
+
 /* Lit tous les capteurs une fois */
-static void Mesures_Lire(void)
+static void Mesures_Lire(Mode mode)
 {
     BME280_Data env = {0};
     bool env_ok = false;
@@ -131,6 +182,8 @@ static void Mesures_Lire(void)
 
     uint16_t lumiere = GroveLight_ReadRaw();
     Capteur_Noter(&capteurs[CAPTEUR_LUMIERE], lumiere != LUMIERE_ERREUR, (float)lumiere);
+
+    Mesures_LireGps(mode);
 }
 
 /* Affiche la mesure sur le port série (plus tard : écriture de la ligne sur la SD) */
@@ -174,12 +227,33 @@ static void Mesures_Afficher(Mode mode)
             }
         }
     }
+
+    if (!position.lu)
+    {
+        printf("  Position non lue (eco)");
+    }
+    else if (position.etat == GPS_POSITION)
+    {
+        printf("  Position %.5f %.5f", position.latitude, position.longitude);
+    }
+    else
+    {
+        printf("  Position NA");
+        if (position.nb_echecs >= NB_ECHECS_ERREUR)
+        {
+            printf(" (erreur)");
+        }
+    }
     printf("\r\n");
 }
 
 Erreur Mesures_Erreur(void)
 {
-    /* Un capteur qui ne répond plus passe avant des données incohérentes */
+    /* Ordre du tableau Erreur : GPS, puis capteur qui ne répond plus, puis données incohérentes */
+    if (position.nb_echecs >= NB_ECHECS_ERREUR)
+    {
+        return ERREUR_GPS;
+    }
     for (int i = 0; i < NB_CAPTEURS; i++)
     {
         if (capteurs[i].nb_echecs >= NB_ECHECS_ERREUR)
@@ -200,6 +274,7 @@ Erreur Mesures_Erreur(void)
 void Mesures_Init(void)
 {
     GroveLight_Init();
+    Gps_Init();
 
     bme280_pret = BME280_Init(&bme280, &hi2c1);
     printf("BME280 : %s\r\n", bme280_pret ? "pret" : "pas de reponse");
@@ -239,6 +314,6 @@ void Mesures_MettreAJour(Mode mode)
     premiere_mesure = false;
     derniere_mesure_ms = HAL_GetTick();
 
-    Mesures_Lire();
+    Mesures_Lire(mode);
     Mesures_Afficher(mode);
 }
