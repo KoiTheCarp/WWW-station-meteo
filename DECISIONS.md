@@ -8,8 +8,7 @@ Les choix déjà expliqués dans le livrable 1 n'y sont pas répétés : format 
 
 Ces points s'éloignent de ce que disent les diagrammes. Il faut les justifier dans la documentation (L4) et à l'oral.
 
-- **Pas de Timer pour LOG_INTERVAL.** Le livrable 1 prévoit un Timer qui envoie une interruption à chaque mesure. Le code compare à chaque tour de boucle le temps écoulé (`HAL_GetTick()`) avec l'intervalle. Pourquoi : plus simple, et la boucle tourne de toute façon en continu pour surveiller les boutons. Le prosit 6 demande un timer pour LOG_INTERVAL : à décider. Où : `Mesures_MettreAJour()` dans `src/mesures.c`.
-- **TIMEOUT utilisé pour le GPS seulement.** Le BME280, la RTC et la lumière répondent ou échouent en quelques millisecondes : une lecture ratée compte tout de suite comme un échec, et le capteur passe en erreur après 2 échecs de suite. Attendre 30 s bloquerait la boucle et les boutons. Le GPS, lui, envoie ses trames tout seul : il est déclaré muet s'il n'a rien envoyé depuis TIMEOUT secondes. Où : `NB_ECHECS_ERREUR` et `Mesures_LireGps()` dans `src/mesures.c`.
+- **Pas de Timer pour LOG_INTERVAL.** Le livrable 1 prévoit un Timer qui envoie une interruption à chaque mesure. Le code compare à chaque tour de boucle le temps écoulé (`HAL_GetTick()`) avec l'intervalle. Pourquoi : même résultat sans périphérique en plus, et la boucle tourne de toute façon en continu pour surveiller les boutons. Le prosit 6 ne l'impose pas (il porte sur le bouton par interruption). Évolution possible : un timer pour mettre la carte en veille entre deux mesures. Où : `Mesures_MettreAJour()` dans `src/mesures.c`.
 - **Paramètres en mémoire Flash, pas en EEPROM.** Le STM32L476 n'a pas d'EEPROM. Les paramètres sont sauvegardés dans la dernière page de la Flash (page 255 de la banque 2, adresse 0x080FF800, loin du programme), avec un mot magique et une somme de contrôle. Une page vide ou abîmée redonne les valeurs par défaut. Où : `src/parametres.c`.
 
 ## 2. Matériel et montage
@@ -38,8 +37,9 @@ Ces points s'éloignent de ce que disent les diagrammes. Il faut les justifier d
 
 ## 5. Mesures
 
-- **Mode test de LOG_INTERVAL.** Avec `MESURES_TEST` à 1, LOG_INTERVAL compte en secondes au lieu de minutes. Pourquoi : tester et faire la démo sans attendre 10 min. **À remettre à 0 pour le rendu.** Où : `src/mesures.c`.
-- **Première mesure tout de suite au démarrage** et en sortant de la configuration, sans attendre un premier intervalle complet.
+- **TIMEOUT comme la spécification, sans bloquer.** Une mesure dure jusqu'à ce que tout ait répondu, ou au plus TIMEOUT secondes. Ce qui n'a pas répondu est réessayé toutes les 100 ms ; entre deux essais, la boucle principale continue (boutons, LED, console). Après TIMEOUT : « NA », et 2 mesures en timeout d'affilée = erreur LED. Vaut pour le BME280, la lumière, la RTC (erreur dès la première fois, livrable 1) et le GPS muet. Vérifié le 20/10 : lumière débranchée, NA après 30 s, passage en mode éco pendant l'attente. En démo, taper `TIMEOUT=5`. Où : `Mesures_Commencer()`, `Mesures_Essayer()`, `Mesures_Terminer()` dans `src/mesures.c`.
+- **Debug / release de LOG_INTERVAL.** Avec `MESURES_TEST` à 1 (debug, par défaut), LOG_INTERVAL compte en secondes : tests et démo. À 0 (release, `-DMESURES_TEST=0` donné par le script de compilation), en minutes comme la spécification. Code rendu = release, démo = debug. Où : `src/mesures.c`.
+- **Première mesure tout de suite au démarrage** et en sortant de la configuration, sans attendre un premier intervalle complet. L'intervalle compte depuis le début de chaque mesure.
 - **Maintenance : une mesure toutes les 2 s.** Le livrable 1 dit « en direct » sans fixer de rythme.
 - **BME280 réinitialisé avant chaque mesure** (environ 15 ms). Un capteur débranché, ou qui subit une baisse de tension (carte SD retirée), repart avec ses réglages d'usine sans mesurer l'humidité, qui reste alors bloquée (92,6 % figé lors de l'essai du 20/10).
 - **Seuils** : MIN/MAX_TEMP_AIR et PRESSURE_MIN/MAX, réglables. Une valeur en dehors déclenche l'erreur « données incohérentes ».
@@ -52,7 +52,7 @@ Ces points s'éloignent de ce que disent les diagrammes. Il faut les justifier d
 ## 6. GPS
 
 - **Réception par interruption.** Chaque octet reçu sur l'UART4 déclenche une interruption qui assemble les trames et garde seulement la dernière trame GGA. La lecture se fait ensuite sans attendre. Pourquoi : la fonction du dépôt CESI (`GroveGPS_ReadGGA`) attend une trame jusqu'à 1,1 s et bloquait la boucle. Où : `src/gps.c`.
-- **GPS « muet » = aucun octet reçu depuis TIMEOUT secondes** (30 s par défaut). Le module envoie une trame par seconde.
+- **GPS « muet » à un essai = aucun octet reçu depuis 3 s** (il envoie une trame par seconde). Muet jusqu'à TIMEOUT = échec.
 - **Seul un GPS muet est une erreur.** Sans position, par exemple à l'intérieur, on écrit « NA » sans faire clignoter la LED. Pourquoi : un GPS sans satellites n'est pas en panne.
 - **Somme de contrôle NMEA vérifiée.** Une trame abîmée n'est pas utilisée.
 - **Mode économique : la première mesure lit le GPS**, puis une mesure sur deux.
@@ -60,9 +60,9 @@ Ces points s'éloignent de ce que disent les diagrammes. Il faut les justifier d
 ## 7. Carte SD
 
 - **FatFs R0.12c** (bibliothèque de ChaN fournie avec STM32Cube), copiée dans `lib/fatfs/`. Configuration dans `ffconf.h` : un volume, noms longs activés (au-delà de `_9`, « AAMMJJ_10.LOG » ne tient plus dans le format court 8.3), pas de formatage depuis la carte.
-- **Pilote SPI écrit pour FatFs** (`src/carte_sd.c`) : `SDLogger_WriteLine()` du dépôt CESI était vide. Initialisation à 15,6 kHz (moins de 400 kHz, imposé par la norme SD), puis 2 MHz pour lire et écrire (environ 2 ms par secteur). CMD0 répété jusqu'à 10 fois et envoyé sans attendre que la carte soit prête, sinon une carte remise après la maintenance n'était jamais reconnue (essai du 20/10).
+- **Pilote SPI écrit pour FatFs** (`src/carte_sd.c`) : `SDLogger_WriteLine()` du dépôt CESI était vide. Initialisation à 15,6 kHz (moins de 400 kHz, imposé par la norme SD), puis 2 MHz pour lire et écrire (environ 2 ms par secteur). CMD0 répété jusqu'à 10 fois et envoyé sans attendre que la carte soit prête, sinon une carte remise après la maintenance n'était jamais reconnue (essai du 20/10). Un secteur est transféré en un seul appel HAL : octet par octet, le processeur à 4 MHz était trop lent.
 - **Ouverture, écriture et fermeture à chaque ligne.** `f_close` vide le tampon sur la carte : entre deux mesures, rien n'est en cours, et une coupure de courant ne perd au plus que la ligne en cours.
-- **Archivage par renommage.** Quand une ligne ferait dépasser FILE_MAX_SIZE, `AAMMJJ_0.LOG` est renommé en première révision libre (`_1`, `_2`...), puis un nouveau `_0` vide est créé avec la ligne d'en-tête. Renommer donne le même résultat que la copie de la spécification, sans recopier le fichier.
+- **Archivage par renommage.** Quand une ligne ferait dépasser FILE_MAX_SIZE, `AAMMJJ_0.LOG` est renommé en première révision libre (`_1`, `_2`...), puis un nouveau `_0` vide est créé avec la ligne d'en-tête. Renommer donne le même résultat que la copie de la spécification, sans recopier le fichier. Le prochain numéro libre est trouvé en lisant le répertoire une seule fois (au premier archivage du jour), puis gardé en mémoire : essayer `_1`, `_2`... un par un bloquait la boucle 8 s avec 38 archives.
 - **FILE_MAX_SIZE = 2048 par défaut** (« 2 Ko par défaut » dans le descriptif ; l'exemple de commande donne 4096).
 - **Erreurs** : plus de place (`FR_DENIED` ou écriture incomplète) = SD pleine ; tout autre problème = erreur d'accès, et la carte est remontée à la mesure suivante (carte retirée puis remise).
 - **Date des fichiers** donnée par la RTC (`get_fattime()` dans `src/horloge.c`).

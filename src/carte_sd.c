@@ -44,12 +44,22 @@ static uint8_t Sd_Echanger(uint8_t octet)
     return recu;
 }
 
+/*
+ * Un secteur entier en un seul appel HAL : octet par octet, le processeur à 4 MHz
+ * passait plus de temps dans HAL_SPI_TransmitReceive que dans le transfert
+ * (essai du 20/10 : 8 s de blocage pendant un archivage).
+ */
+static uint8_t octets_ff[512];
+static uint8_t octets_ignores[512];
+
 static void Sd_Recevoir(uint8_t *tampon, uint32_t taille)
 {
-    for (uint32_t i = 0U; i < taille; i++)
-    {
-        tampon[i] = Sd_Echanger(0xFFU);
-    }
+    (void)HAL_SPI_TransmitReceive(&SD_SPI_HANDLE, octets_ff, tampon, (uint16_t)taille, 100U);
+}
+
+static void Sd_Envoyer(const uint8_t *tampon, uint32_t taille)
+{
+    (void)HAL_SPI_TransmitReceive(&SD_SPI_HANDLE, (uint8_t *)tampon, octets_ignores, (uint16_t)taille, 100U);
 }
 
 /* Vitesse du SPI : lente (< 400 kHz) pour l'initialisation, rapide ensuite */
@@ -201,10 +211,7 @@ static bool Sd_EcrireBloc(const uint8_t *tampon, uint8_t jeton)
         return true;
     }
 
-    for (uint32_t i = 0U; i < 512U; i++)
-    {
-        (void)Sd_Echanger(tampon[i]);
-    }
+    Sd_Envoyer(tampon, 512U);
     (void)Sd_Echanger(0xFFU);     /* CRC ignoré */
     (void)Sd_Echanger(0xFFU);
 
@@ -219,6 +226,11 @@ DSTATUS disk_initialize(BYTE pdrv)
     if (pdrv != 0U)
     {
         return STA_NOINIT;
+    }
+
+    for (uint32_t i = 0U; i < sizeof(octets_ff); i++)
+    {
+        octets_ff[i] = 0xFFU;     /* en lecture, la carte attend des 0xFF en face de chaque octet */
     }
 
     Sd_VitesseSpi(SPI_BAUDRATEPRESCALER_256);   /* 4 MHz / 256 = 15,6 kHz */

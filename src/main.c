@@ -86,7 +86,7 @@ int main(void)
         Erreur erreur = ERREUR_AUCUNE;
         if (mode != MODE_CONFIGURATION)
         {
-            erreur = Plus_Prioritaire(Horloge_Erreur(), Mesures_Erreur());
+            erreur = Mesures_Erreur();
             if (mode != MODE_MAINTENANCE)
             {
                 erreur = Plus_Prioritaire(erreur, Stockage_Erreur());

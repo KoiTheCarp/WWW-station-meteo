@@ -3,36 +3,28 @@
 #include "grove_rtc_ds1307.h"
 #include "integer.h"
 
-static bool derniere_lecture_ok = true;
-
 /* Dernière date lue, pour dater les fichiers de la carte SD (get_fattime) */
 static RTC_DateTime derniere_date = { 0, 0, 0, 1, 1, 1, 2026 };
 
 void Horloge_Init(void)
 {
-    derniere_lecture_ok = GroveRTC_Init();
-    printf("RTC : %s\r\n", derniere_lecture_ok ? "prete" : "pas de reponse");
+    printf("RTC : %s\r\n", GroveRTC_Init() ? "prete" : "pas de reponse");
 }
 
 bool Horloge_Lire(RTC_DateTime *dt)
 {
-    derniere_lecture_ok = GroveRTC_GetDateTime(dt);
-    if (derniere_lecture_ok)
+    if (!GroveRTC_GetDateTime(dt))
     {
-        derniere_date = *dt;
+        return false;
     }
-    return derniere_lecture_ok;
+    derniere_date = *dt;
+    return true;
 }
 
 /* On relit la RTC, on change seulement les champs demandés, puis on réécrit tout */
 static bool Horloge_Modifier(RTC_DateTime *dt)
 {
-    if (!GroveRTC_GetDateTime(dt))
-    {
-        derniere_lecture_ok = false;
-        return false;
-    }
-    return true;
+    return GroveRTC_GetDateTime(dt);
 }
 
 bool Horloge_RegleHeure(uint8_t heures, uint8_t minutes, uint8_t secondes)
@@ -73,11 +65,6 @@ bool Horloge_RegleJour(uint8_t jour_semaine)
     }
     dt.dayOfWeek = jour_semaine;
     return GroveRTC_SetDateTime(&dt);
-}
-
-Erreur Horloge_Erreur(void)
-{
-    return derniere_lecture_ok ? ERREUR_AUCUNE : ERREUR_RTC;
 }
 
 /*
