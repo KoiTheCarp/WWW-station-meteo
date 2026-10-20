@@ -9,7 +9,7 @@
 
 static Mode mode_courant = MODE_STANDARD;
 
-/* Heure de la dernière activité en configuration (plus tard : remise à jour à chaque commande UART) */
+/* Heure de la dernière activité en configuration (remise à jour à chaque caractère tapé) */
 static uint32_t derniere_activite_config_ms = 0U;
 
 /* Change de mode et met la LED à la couleur du mode (tableau du livrable 1) */
@@ -100,4 +100,9 @@ void Modes_MettreAJour(void)
 Mode Modes_Courant(void)
 {
     return mode_courant;
+}
+
+void Modes_SignalerActivite(void)
+{
+    derniere_activite_config_ms = HAL_GetTick();
 }

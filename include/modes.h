@@ -18,4 +18,7 @@ void Modes_MettreAJour(void);
 
 Mode Modes_Courant(void);
 
+/* Une commande a été tapée en configuration : le compte des 30 min sans activité repart à zéro */
+void Modes_SignalerActivite(void);
+
 #endif
