@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "stm32l4xx_hal.h"
@@ -133,9 +132,6 @@ EtatGps Gps_Lire(double *latitude, double *longitude, uint32_t silence_max_ms)
         ligne[i] = derniere_gga[i];
     }
     __enable_irq();
-
-    /* PROVISOIRE : trame GGA brute, pour savoir pourquoi il n'y a jamais de position */
-    printf("GPS : %s (silence %lu ms)\r\n", recue ? ligne : "aucune trame GGA", (unsigned long)silence_ms);
 
     if (!recue || silence_ms > silence_max_ms)
     {
