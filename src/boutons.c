@@ -134,11 +134,19 @@ static bool Bouton_AppuiLong(Bouton *b)
         return false;
     }
 
-    /* Sécurité contre un rebond mal filtré : le bouton est-il vraiment encore enfoncé ? */
+    /*
+     * Sécurité contre un rebond mal filtré : le bouton est-il vraiment encore enfoncé ?
+     * Si non, le front de relâchement a été pris pour un rebond (appui de moins de 30 ms) :
+     * on oublie l'appui, sinon le prochain effleurement compterait comme un appui de 5 s.
+     */
+    __disable_irq();
     if (HAL_GPIO_ReadPin(b->port, b->pin) != ETAT_ENFONCE)
     {
+        b->enfonce = false;
+        __enable_irq();
         return false;
     }
+    __enable_irq();
 
     if ((HAL_GetTick() - debut) < APPUI_LONG_MS)
     {
