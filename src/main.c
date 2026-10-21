@@ -70,7 +70,7 @@ int main(void)
         /* Une mesure toutes les LOG_INTERVAL (sans bloquer) */
         if (Mesures_MettreAJour(mode))
         {
-            printf("%s", Mesures_Ligne());
+            Mesures_Afficher();
 
             /* En maintenance, les mesures sont seulement affichées */
             if (mode != MODE_MAINTENANCE)

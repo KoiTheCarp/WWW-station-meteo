@@ -358,6 +358,14 @@ static const char *Mesures_NiveauLumiere(const Capteur *c)
     return "MOYENNE";
 }
 
+/* Spécification : hors de HYGR_MINT..HYGR_MAXT, l'humidité n'est pas prise en compte */
+static bool Mesures_HumiditeOk(void)
+{
+    const Capteur *t = &capteurs[CAPTEUR_TEMPERATURE];
+    return !t->valide
+        || (t->valeur >= (float)Parametre(P_HYGR_MINT) && t->valeur <= (float)Parametre(P_HYGR_MAXT));
+}
+
 /* Met la mesure en forme : une ligne CSV horodatée, une valeur par colonne (livrable 1) */
 static void Mesures_FormaterLigne(void)
 {
@@ -378,10 +386,7 @@ static void Mesures_FormaterLigne(void)
     p += n;
     reste -= (size_t)n;
 
-    /* Spécification : hors de HYGR_MINT..HYGR_MAXT, l'humidité n'est pas prise en compte */
-    const Capteur *t = &capteurs[CAPTEUR_TEMPERATURE];
-    bool humidite_ok = !t->valide
-                    || (t->valeur >= (float)Parametre(P_HYGR_MINT) && t->valeur <= (float)Parametre(P_HYGR_MAXT));
+    bool humidite_ok = Mesures_HumiditeOk();
 
     n = Mesures_Colonne(p, reste, &capteurs[CAPTEUR_TEMPERATURE], ",%.1f", true);
     p += n; reste -= (size_t)n;
@@ -402,6 +407,59 @@ static void Mesures_FormaterLigne(void)
     else
     {
         snprintf(p, reste, ",NA,NA\r\n");
+    }
+}
+
+/* Affiche une valeur sur la console : OFF si le capteur est désactivé, NA s'il n'a pas répondu */
+static void Mesures_AfficherValeur(const Capteur *c, const char *format, bool pris_en_compte)
+{
+    if (!c->actif)
+    {
+        printf("OFF");
+    }
+    else if (!c->valide || !pris_en_compte)
+    {
+        printf("NA");
+    }
+    else
+    {
+        printf(format, c->valeur);
+    }
+}
+
+void Mesures_Afficher(void)
+{
+    if (date_valide)
+    {
+        printf("%02u:%02u:%02u  ", (unsigned)date_mesure.hours, (unsigned)date_mesure.minutes,
+               (unsigned)date_mesure.seconds);
+    }
+    else
+    {
+        printf("Heure NA  ");
+    }
+
+    printf("Temp ");
+    Mesures_AfficherValeur(&capteurs[CAPTEUR_TEMPERATURE], "%.1f °C", true);
+    printf(" | Humidite ");
+    Mesures_AfficherValeur(&capteurs[CAPTEUR_HUMIDITE], "%.1f %%", Mesures_HumiditeOk());
+    printf(" | Pression ");
+    Mesures_AfficherValeur(&capteurs[CAPTEUR_PRESSION], "%.1f hPa", true);
+    printf(" | Lumiere ");
+    Mesures_AfficherValeur(&capteurs[CAPTEUR_LUMIERE], "%.0f", true);
+    if (capteurs[CAPTEUR_LUMIERE].actif && capteurs[CAPTEUR_LUMIERE].valide)
+    {
+        printf(" (%s)", Mesures_NiveauLumiere(&capteurs[CAPTEUR_LUMIERE]));
+    }
+
+    /* Même règle que la ligne CSV : en mode économique, la dernière position connue */
+    if (position.connue && position.etat != GPS_MUET)
+    {
+        printf(" | GPS %.5f, %.5f\r\n", position.latitude, position.longitude);
+    }
+    else
+    {
+        printf(" | GPS NA\r\n");
     }
 }
 

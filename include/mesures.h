@@ -20,6 +20,9 @@ bool Mesures_MettreAJour(Mode mode);
 /* Dernière mesure en CSV (date, heure, capteurs, position), terminée par \r\n */
 const char *Mesures_Ligne(void);
 
+/* Dernière mesure affichée en clair sur la console (heure, valeurs avec leurs unités) */
+void Mesures_Afficher(void);
+
 /* Noms des colonnes, première ligne de chaque fichier de log */
 const char *Mesures_Entete(void);
 
