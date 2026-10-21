@@ -85,7 +85,7 @@ static BME280_Handle bme280;
 typedef struct
 {
     EtatGps etat;           /* résultat de la dernière lecture */
-    bool connue;            /* a-t-on déjà eu une position ? (réutilisée en mode économique) */
+    bool connue;            /* position valide à la dernière lecture ? (réutilisée en mode économique) */
     double latitude;
     double longitude;
     uint8_t nb_echecs;      /* lectures d'affilée où le module était muet */
@@ -196,6 +196,10 @@ static void Mesures_EssayerGps(void)
         position.latitude = latitude;
         position.longitude = longitude;
         position.connue = true;
+    }
+    else if (position.etat == GPS_SANS_POSITION)
+    {
+        position.connue = false;    /* position perdue : NA, pas l'ancienne position */
     }
     mesure.gps_fini = (position.etat != GPS_MUET);
 }
