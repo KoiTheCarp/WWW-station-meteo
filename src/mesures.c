@@ -124,7 +124,7 @@ static Mode mode_precedent = MODE_CONFIGURATION;
 
 static char ligne[160];
 
-static const char ENTETE[] = "DATE,HEURE,TEMP_AIR_C,HYGR_PCT,PRESSION_HPA,LUMIERE,NIVEAU_LUMIERE,LATITUDE,LONGITUDE\r\n";
+static const char ENTETE[] = "DATE, HEURE, TEMP_AIR_C, HYGR_PCT, PRESSION_HPA, LUMIERE, NIVEAU_LUMIERE, LATITUDE, LONGITUDE\r\n";
 
 /* Valeur lue mais en dehors des seuils : données incohérentes */
 static bool Capteur_HorsSeuils(const Capteur *c)
@@ -325,11 +325,11 @@ static int Mesures_Colonne(char *p, size_t reste, const Capteur *c, const char *
 {
     if (!c->actif)
     {
-        return snprintf(p, reste, ",OFF");
+        return snprintf(p, reste, ", OFF");
     }
     if (!c->valide || !pris_en_compte)
     {
-        return snprintf(p, reste, ",NA");
+        return snprintf(p, reste, ", NA");
     }
     return snprintf(p, reste, format, c->valeur);
 }
@@ -375,38 +375,38 @@ static void Mesures_FormaterLigne(void)
 
     if (date_valide)
     {
-        n = snprintf(p, reste, "%04u-%02u-%02u,%02u:%02u:%02u",
+        n = snprintf(p, reste, "%04u-%02u-%02u, %02u:%02u:%02u",
                      (unsigned)date_mesure.year, (unsigned)date_mesure.month, (unsigned)date_mesure.day,
                      (unsigned)date_mesure.hours, (unsigned)date_mesure.minutes, (unsigned)date_mesure.seconds);
     }
     else
     {
-        n = snprintf(p, reste, "NA,NA");
+        n = snprintf(p, reste, "NA, NA");
     }
     p += n;
     reste -= (size_t)n;
 
     bool humidite_ok = Mesures_HumiditeOk();
 
-    n = Mesures_Colonne(p, reste, &capteurs[CAPTEUR_TEMPERATURE], ",%.1f", true);
+    n = Mesures_Colonne(p, reste, &capteurs[CAPTEUR_TEMPERATURE], ", %.1f", true);
     p += n; reste -= (size_t)n;
-    n = Mesures_Colonne(p, reste, &capteurs[CAPTEUR_HUMIDITE], ",%.1f", humidite_ok);
+    n = Mesures_Colonne(p, reste, &capteurs[CAPTEUR_HUMIDITE], ", %.1f", humidite_ok);
     p += n; reste -= (size_t)n;
-    n = Mesures_Colonne(p, reste, &capteurs[CAPTEUR_PRESSION], ",%.1f", true);
+    n = Mesures_Colonne(p, reste, &capteurs[CAPTEUR_PRESSION], ", %.1f", true);
     p += n; reste -= (size_t)n;
-    n = Mesures_Colonne(p, reste, &capteurs[CAPTEUR_LUMIERE], ",%.0f", true);
+    n = Mesures_Colonne(p, reste, &capteurs[CAPTEUR_LUMIERE], ", %.0f", true);
     p += n; reste -= (size_t)n;
-    n = snprintf(p, reste, ",%s", Mesures_NiveauLumiere(&capteurs[CAPTEUR_LUMIERE]));
+    n = snprintf(p, reste, ", %s", Mesures_NiveauLumiere(&capteurs[CAPTEUR_LUMIERE]));
     p += n; reste -= (size_t)n;
 
     /* En mode économique, une mesure sur deux réutilise la dernière position connue */
     if (position.connue && position.etat != GPS_MUET)
     {
-        snprintf(p, reste, ",%.5f,%.5f\r\n", position.latitude, position.longitude);
+        snprintf(p, reste, ", %.5f, %.5f\r\n", position.latitude, position.longitude);
     }
     else
     {
-        snprintf(p, reste, ",NA,NA\r\n");
+        snprintf(p, reste, ", NA, NA\r\n");
     }
 }
 
