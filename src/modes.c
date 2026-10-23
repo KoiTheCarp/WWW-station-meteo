@@ -3,9 +3,14 @@
 #include "modes.h"
 #include "boutons.h"
 #include "grove_rgb.h"
+#include "parametres.h"
 
-/* Sortie automatique du mode configuration après 30 min sans activité */
+/* Sortie automatique du mode configuration après 30 min sans activité (20 s en version debug) */
+#if MESURES_TEST
+#define CONFIG_INACTIVITE_MS  (20U * 1000U)
+#else
 #define CONFIG_INACTIVITE_MS  (30U * 60U * 1000U)
+#endif
 
 static Mode mode_courant = MODE_STANDARD;
 

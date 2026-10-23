@@ -4,6 +4,15 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/*
+ * Version debug (MESURES_TEST à 1) : durées raccourcies pour les tests et la démo.
+ * Version release (à 0) : durées de la spécification.
+ * Choisi par le script de compilation (-DMESURES_TEST=0).
+ */
+#ifndef MESURES_TEST
+#define MESURES_TEST  1
+#endif
+
 /* Les paramètres réglables en mode configuration (tableau de la spécification) */
 typedef enum
 {

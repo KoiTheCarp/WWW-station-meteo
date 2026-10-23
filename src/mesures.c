@@ -10,15 +10,7 @@
 
 extern I2C_HandleTypeDef hi2c1;     /* bus I2C créé dans setup.c */
 
-/*
- * Version debug (MESURES_TEST à 1) : LOG_INTERVAL compte en secondes au lieu
- * de minutes, pour les tests et la démo. Version release (à 0) : en minutes,
- * comme la spécification. Choisi par le script de compilation (-DMESURES_TEST=0).
- */
-#ifndef MESURES_TEST
-#define MESURES_TEST  1
-#endif
-
+/* Version debug (MESURES_TEST, voir parametres.h) : LOG_INTERVAL compte en secondes au lieu de minutes */
 #if MESURES_TEST
 #define UNITE_INTERVALLE_MS  1000U
 #else
