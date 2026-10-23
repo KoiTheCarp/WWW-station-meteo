@@ -12,11 +12,11 @@ extern I2C_HandleTypeDef hi2c1;
 
 #if MESURES_TEST
 #define UNITE_INTERVALLE_MS  1000U
+#define NB_ECHECS_ERREUR     1U
 #else
 #define UNITE_INTERVALLE_MS  (60U * 1000U)
+#define NB_ECHECS_ERREUR     2U
 #endif
-
-#define NB_ECHECS_ERREUR  2U
 
 #define ESSAI_PERIODE_MS  100U
 

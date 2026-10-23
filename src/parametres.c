@@ -7,6 +7,14 @@
 #define FLASH_PAGE_PARAMETRES     255U
 #define MAGIE                     0x57575731UL
 
+#if MESURES_TEST
+#define LOG_INTERVAL_DEFAUT  5
+#define TIMEOUT_DEFAUT       5
+#else
+#define LOG_INTERVAL_DEFAUT  10
+#define TIMEOUT_DEFAUT       30
+#endif
+
 typedef struct
 {
     const char *nom;
@@ -17,9 +25,9 @@ typedef struct
 
 static const Definition definitions[NB_PARAMETRES] =
 {
-    [P_LOG_INTERVAL]  = { "LOG_INTERVAL",  1,    1440,    10 },
+    [P_LOG_INTERVAL]  = { "LOG_INTERVAL",  1,    1440,    LOG_INTERVAL_DEFAUT },
     [P_FILE_MAX_SIZE] = { "FILE_MAX_SIZE", 512,  1048576, 2048 },
-    [P_TIMEOUT]       = { "TIMEOUT",       1,    300,     30 },
+    [P_TIMEOUT]       = { "TIMEOUT",       1,    300,     TIMEOUT_DEFAUT },
     [P_LUMIN]         = { "LUMIN",         0,    1,       1 },
     [P_LUMIN_LOW]     = { "LUMIN_LOW",     0,    1023,    255 },
     [P_LUMIN_HIGH]    = { "LUMIN_HIGH",    0,    1023,    768 },
