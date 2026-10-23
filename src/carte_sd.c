@@ -1,9 +1,3 @@
-/*
- * Pilote de la carte SD en mode SPI, pour FatFs.
- * FatFs ne sait que lire et écrire des secteurs de 512 octets : ce fichier
- * fournit ces fonctions (disk_initialize, disk_read, disk_write...) en parlant
- * à la carte avec les commandes SD (CMD0, CMD8, ACMD41, CMD17, CMD24...).
- */
 #include <stdbool.h>
 #include <stddef.h>
 #include "stm32l4xx_hal.h"
@@ -11,22 +5,21 @@
 #include "diskio.h"
 #include "carte_sd.h"
 
-extern SPI_HandleTypeDef SD_SPI_HANDLE;     /* SPI1, créé dans setup.c */
+extern SPI_HandleTypeDef SD_SPI_HANDLE;
 
-/* Commandes SD utilisées (ACMD = précédée de CMD55) */
-#define CMD0    0U      /* remise à zéro, passage en mode SPI */
-#define CMD8    8U      /* tension d'alimentation (cartes SDHC) */
-#define CMD12   12U     /* fin d'une lecture de plusieurs secteurs */
-#define CMD16   16U     /* taille d'un bloc (cartes anciennes) */
-#define CMD17   17U     /* lecture d'un secteur */
-#define CMD18   18U     /* lecture de plusieurs secteurs */
-#define CMD24   24U     /* écriture d'un secteur */
-#define CMD25   25U     /* écriture de plusieurs secteurs */
-#define CMD55   55U     /* la commande suivante est une ACMD */
-#define CMD58   58U     /* lecture du registre OCR (type de carte) */
-#define ACMD41  (0x80U | 41U)   /* démarrage de la carte */
+#define CMD0    0U
+#define CMD8    8U
+#define CMD12   12U
+#define CMD16   16U
+#define CMD17   17U
+#define CMD18   18U
+#define CMD24   24U
+#define CMD25   25U
+#define CMD55   55U
+#define CMD58   58U
+#define ACMD41  (0x80U | 41U)
 
-#define JETON_DEBUT_DONNEES     0xFEU   /* avant les 512 octets d'un secteur */
+#define JETON_DEBUT_DONNEES     0xFEU
 #define JETON_ECRITURE_MULTIPLE 0xFCU
 #define JETON_FIN_ECRITURE      0xFDU
 
@@ -35,7 +28,7 @@ extern SPI_HandleTypeDef SD_SPI_HANDLE;     /* SPI1, créé dans setup.c */
 #define TIMEOUT_ECRITURE_MS 500U
 
 static volatile DSTATUS etat = STA_NOINIT;
-static bool adressage_par_bloc = false;    /* SDHC : adresse en secteurs, SDSC : en octets */
+static bool adressage_par_bloc = false;
 
 static uint8_t Sd_Echanger(uint8_t octet)
 {
@@ -44,11 +37,6 @@ static uint8_t Sd_Echanger(uint8_t octet)
     return recu;
 }
 
-/*
- * Un secteur entier en un seul appel HAL : octet par octet, le processeur à 4 MHz
- * passait plus de temps dans HAL_SPI_TransmitReceive que dans le transfert
- * (essai du 20/10 : 8 s de blocage pendant un archivage).
- */
 static uint8_t octets_ff[512];
 static uint8_t octets_ignores[512];
 
@@ -62,7 +50,6 @@ static void Sd_Envoyer(const uint8_t *tampon, uint32_t taille)
     (void)HAL_SPI_TransmitReceive(&SD_SPI_HANDLE, (uint8_t *)tampon, octets_ignores, (uint16_t)taille, 100U);
 }
 
-/* Vitesse du SPI : lente (< 400 kHz) pour l'initialisation, rapide ensuite */
 static void Sd_VitesseSpi(uint32_t prescaler)
 {
     __HAL_SPI_DISABLE(&SD_SPI_HANDLE);
@@ -70,7 +57,6 @@ static void Sd_VitesseSpi(uint32_t prescaler)
     __HAL_SPI_ENABLE(&SD_SPI_HANDLE);
 }
 
-/* La carte répond 0xFF quand elle a fini son travail interne */
 static bool Sd_AttendrePrete(uint32_t timeout_ms)
 {
     uint32_t debut = HAL_GetTick();
@@ -90,7 +76,7 @@ static bool Sd_AttendrePrete(uint32_t timeout_ms)
 static void Sd_Deselectionner(void)
 {
     HAL_GPIO_WritePin(SD_CS_PORT, SD_CS_PIN, GPIO_PIN_SET);
-    (void)Sd_Echanger(0xFFU);     /* un octet de plus pour que la carte relâche MISO */
+    (void)Sd_Echanger(0xFFU);
 }
 
 static bool Sd_Selectionner(void)
@@ -106,7 +92,6 @@ static bool Sd_Selectionner(void)
     return false;
 }
 
-/* Envoie une commande et renvoie la réponse R1 (0 = OK, 1 = en cours d'initialisation) */
 static uint8_t Sd_Commande(uint8_t cmd, uint32_t argument)
 {
     uint8_t reponse;
@@ -123,11 +108,6 @@ static uint8_t Sd_Commande(uint8_t cmd, uint32_t argument)
 
     if (cmd == CMD0)
     {
-        /*
-         * Carte qu'on vient de remettre : avant CMD0, elle n'est pas encore en mode SPI
-         * et peut ne pas répondre 0xFF. On n'attend donc pas qu'elle soit prête
-         * (essai du 20/10 : carte remise après la maintenance jamais reconnue).
-         */
         Sd_Deselectionner();
         HAL_GPIO_WritePin(SD_CS_PORT, SD_CS_PIN, GPIO_PIN_RESET);
         (void)Sd_Echanger(0xFFU);
@@ -141,7 +121,6 @@ static uint8_t Sd_Commande(uint8_t cmd, uint32_t argument)
         }
     }
 
-    /* Trame de 6 octets : commande, argument sur 4 octets, CRC (vérifié seulement pour CMD0 et CMD8) */
     uint8_t crc = 0x01U;
     if (cmd == CMD0)
     {
@@ -161,10 +140,9 @@ static uint8_t Sd_Commande(uint8_t cmd, uint32_t argument)
 
     if (cmd == CMD12)
     {
-        (void)Sd_Echanger(0xFFU);     /* octet de remplissage après CMD12 */
+        (void)Sd_Echanger(0xFFU);
     }
 
-    /* La réponse arrive dans les 10 octets suivants (bit 7 à 0) */
     for (uint8_t i = 0U; i < 10U; i++)
     {
         reponse = Sd_Echanger(0xFFU);
@@ -193,7 +171,7 @@ static bool Sd_LireBloc(uint8_t *tampon)
     }
 
     Sd_Recevoir(tampon, 512U);
-    (void)Sd_Echanger(0xFFU);     /* CRC ignoré */
+    (void)Sd_Echanger(0xFFU);
     (void)Sd_Echanger(0xFFU);
     return true;
 }
@@ -212,10 +190,9 @@ static bool Sd_EcrireBloc(const uint8_t *tampon, uint8_t jeton)
     }
 
     Sd_Envoyer(tampon, 512U);
-    (void)Sd_Echanger(0xFFU);     /* CRC ignoré */
+    (void)Sd_Echanger(0xFFU);
     (void)Sd_Echanger(0xFFU);
 
-    /* Réponse de la carte : xxx0 0101 = données acceptées */
     return (Sd_Echanger(0xFFU) & 0x1FU) == 0x05U;
 }
 
@@ -230,12 +207,11 @@ DSTATUS disk_initialize(BYTE pdrv)
 
     for (uint32_t i = 0U; i < sizeof(octets_ff); i++)
     {
-        octets_ff[i] = 0xFFU;     /* en lecture, la carte attend des 0xFF en face de chaque octet */
+        octets_ff[i] = 0xFFU;
     }
 
-    Sd_VitesseSpi(SPI_BAUDRATEPRESCALER_256);   /* 4 MHz / 256 = 15,6 kHz */
+    Sd_VitesseSpi(SPI_BAUDRATEPRESCALER_256);
 
-    /* Au moins 74 coups d'horloge avec CS haut pour réveiller la carte */
     HAL_GPIO_WritePin(SD_CS_PORT, SD_CS_PIN, GPIO_PIN_SET);
     for (uint8_t i = 0U; i < 10U; i++)
     {
@@ -245,7 +221,6 @@ DSTATUS disk_initialize(BYTE pdrv)
     etat = STA_NOINIT;
     adressage_par_bloc = false;
 
-    /* Certaines cartes ne répondent pas au premier CMD0 : on réessaie (comme sd_logger.c du dépôt) */
     uint8_t reponse = 0xFFU;
     for (uint8_t essai = 0U; essai < 10U && reponse != 1U; essai++)
     {
@@ -258,7 +233,6 @@ DSTATUS disk_initialize(BYTE pdrv)
 
         if (Sd_Commande(CMD8, 0x1AAU) == 1U)
         {
-            /* Carte SD version 2 (SDHC ou SDSC récente) */
             Sd_Recevoir(ocr, 4U);
             if (ocr[2] == 0x01U && ocr[3] == 0xAAU)
             {
@@ -268,14 +242,13 @@ DSTATUS disk_initialize(BYTE pdrv)
                 if ((HAL_GetTick() - debut) < TIMEOUT_INIT_MS && Sd_Commande(CMD58, 0U) == 0U)
                 {
                     Sd_Recevoir(ocr, 4U);
-                    adressage_par_bloc = (ocr[0] & 0x40U) != 0U;   /* bit CCS : carte SDHC */
+                    adressage_par_bloc = (ocr[0] & 0x40U) != 0U;
                     etat = 0U;
                 }
             }
         }
         else
         {
-            /* Carte SD version 1 : blocs de 512 octets à imposer */
             while ((HAL_GetTick() - debut) < TIMEOUT_INIT_MS && Sd_Commande(ACMD41, 0U) != 0U)
             {
             }
@@ -290,7 +263,7 @@ DSTATUS disk_initialize(BYTE pdrv)
 
     if (etat == 0U)
     {
-        Sd_VitesseSpi(SPI_BAUDRATEPRESCALER_2);  /* 2 MHz : un secteur en environ 2 ms */
+        Sd_VitesseSpi(SPI_BAUDRATEPRESCALER_2);
     }
     return etat;
 }
@@ -399,7 +372,6 @@ DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void *buff)
 
     if (cmd == CTRL_SYNC)
     {
-        /* Attendre que la carte ait fini d'écrire avant de dire que c'est fait */
         bool prete = Sd_Selectionner();
         Sd_Deselectionner();
         return prete ? RES_OK : RES_ERROR;
@@ -407,7 +379,6 @@ DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void *buff)
     return RES_PARERR;
 }
 
-/* Oublie la carte : elle peut être retirée, et sera réinitialisée au prochain montage */
 void CarteSd_Oublier(void)
 {
     etat = STA_NOINIT;

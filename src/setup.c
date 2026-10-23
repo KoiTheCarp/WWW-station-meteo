@@ -7,26 +7,17 @@ SPI_HandleTypeDef hspi1;
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart4;
 
-/**
-  * @brief Fonction de transmission du moniteur série (implicitement appelée lors d'un printf)
-  */
 int _write(int file, char *ptr, int len)
 {
     HAL_UART_Transmit(&huart2, (uint8_t *)ptr, len, HAL_MAX_DELAY);
     return len;
 }
 
-/**
-  * @brief Timer interne de la carte
-  */
 void SysTick_Handler(void)
 {
     HAL_IncTick();
 }
 
-/**
-  * @brief Initialisation I2C
-  */
 static void MX_I2C1_Init(void)
 {
     __HAL_RCC_GPIOB_CLK_ENABLE();
@@ -34,7 +25,7 @@ static void MX_I2C1_Init(void)
 
     GPIO_InitTypeDef gpio = {0};
 
-    gpio.Pin = GPIO_PIN_8 | GPIO_PIN_9; // PB8 SCL, PB9 SDA
+    gpio.Pin = GPIO_PIN_8 | GPIO_PIN_9;
     gpio.Mode = GPIO_MODE_AF_OD;
     gpio.Pull = GPIO_PULLUP;
     gpio.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
@@ -54,9 +45,6 @@ static void MX_I2C1_Init(void)
     HAL_I2C_Init(&hi2c1);
 }
 
-/**
-  * @brief Initialisation SPI
-  */
 static void MX_SPI1_Init(void)
 {
     __HAL_RCC_GPIOA_CLK_ENABLE();
@@ -64,14 +52,14 @@ static void MX_SPI1_Init(void)
 
     GPIO_InitTypeDef gpio = {0};
 
-    gpio.Pin = GPIO_PIN_5 | GPIO_PIN_7; // PA5 SCK, PA7 MOSI
+    gpio.Pin = GPIO_PIN_5 | GPIO_PIN_7;
     gpio.Mode = GPIO_MODE_AF_PP;
     gpio.Pull = GPIO_NOPULL;
     gpio.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
     gpio.Alternate = GPIO_AF5_SPI1;
     HAL_GPIO_Init(GPIOA, &gpio);
 
-    gpio.Pin = GPIO_PIN_6; // PA6 MISO — pull-up requis : la carte relâche MISO (haute-Z) quand CS est haut
+    gpio.Pin = GPIO_PIN_6;
     gpio.Mode = GPIO_MODE_AF_PP;
     gpio.Pull = GPIO_PULLUP;
     gpio.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
@@ -102,9 +90,6 @@ static void MX_SPI1_Init(void)
     HAL_SPI_Init(&hspi1);
 }
 
-/**
-  * @brief Initialisation de l'horloge
-  */
 void SystemClock_Config(void)
 {
     RCC_OscInitTypeDef osc = {0};
@@ -132,16 +117,12 @@ void SystemClock_Config(void)
     HAL_RCC_ClockConfig(&clk, FLASH_LATENCY_0);
 }
 
-/**
-  * @brief Initialisations des ports UART et de la communication série
-  */
 void HAL_UART_MspInit(UART_HandleTypeDef *uartHandle)
 {
     GPIO_InitTypeDef GPIO_InitStruct = {0};
 
     if (uartHandle->Instance == USART2)
     {
-        /* Debug serial : PA2=TX, PA3=RX — Grove UART (connecté au ST-Link) */
         __HAL_RCC_USART2_CLK_ENABLE();
         __HAL_RCC_GPIOA_CLK_ENABLE();
 
@@ -154,7 +135,6 @@ void HAL_UART_MspInit(UART_HandleTypeDef *uartHandle)
     }
     else if (uartHandle->Instance == UART4)
     {
-        /* GPS Air530Z : PA0=UART4_TX, PA1=UART4_RX — Port Grove A0 */
         __HAL_RCC_UART4_CLK_ENABLE();
         __HAL_RCC_GPIOA_CLK_ENABLE();
 
@@ -184,7 +164,6 @@ static void MX_USART2_UART_Init(void)
         while (1);
     }
 }
-
 
 void Global_Init(void)
 {

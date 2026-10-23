@@ -3,7 +3,6 @@
 #include "grove_rtc_ds1307.h"
 #include "integer.h"
 
-/* Dernière date lue, pour dater les fichiers de la carte SD (get_fattime) */
 static RTC_DateTime derniere_date = { 0, 0, 0, 1, 1, 1, 2026 };
 
 void Horloge_Init(void)
@@ -21,7 +20,6 @@ bool Horloge_Lire(RTC_DateTime *dt)
     return true;
 }
 
-/* On relit la RTC, on change seulement les champs demandés, puis on réécrit tout */
 static bool Horloge_Modifier(RTC_DateTime *dt)
 {
     return GroveRTC_GetDateTime(dt);
@@ -67,10 +65,6 @@ bool Horloge_RegleJour(uint8_t jour_semaine)
     return GroveRTC_SetDateTime(&dt);
 }
 
-/*
- * Appelée par FatFs pour dater les fichiers créés ou modifiés.
- * Format imposé : année depuis 1980, mois, jour, heures, minutes, secondes / 2.
- */
 DWORD get_fattime(void)
 {
     const RTC_DateTime *d = &derniere_date;

@@ -5,7 +5,6 @@
 #include "grove_rgb.h"
 #include "parametres.h"
 
-/* Sortie automatique du mode configuration après 30 min sans activité (20 s en version debug) */
 #if MESURES_TEST
 #define CONFIG_INACTIVITE_MS  (20U * 1000U)
 #else
@@ -14,10 +13,8 @@
 
 static Mode mode_courant = MODE_STANDARD;
 
-/* Heure de la dernière activité en configuration (remise à jour à chaque caractère tapé) */
 static uint32_t derniere_activite_config_ms = 0U;
 
-/* Change de mode et met la LED à la couleur du mode (tableau du livrable 1) */
 static void Modes_Changer(Mode nouveau)
 {
     mode_courant = nouveau;
@@ -25,22 +22,22 @@ static void Modes_Changer(Mode nouveau)
     switch (nouveau)
     {
         case MODE_STANDARD:
-            GroveRGB_SetColor(0, 255, 0);       /* vert */
+            GroveRGB_SetColor(0, 255, 0);
             printf("Mode STANDARD\r\n");
             break;
 
         case MODE_CONFIGURATION:
-            GroveRGB_SetColor(255, 255, 0);     /* jaune */
+            GroveRGB_SetColor(255, 255, 0);
             printf("Mode CONFIGURATION\r\n");
             break;
 
         case MODE_ECONOMIQUE:
-            GroveRGB_SetColor(0, 0, 255);       /* bleu */
+            GroveRGB_SetColor(0, 0, 255);
             printf("Mode ECONOMIQUE\r\n");
             break;
 
         case MODE_MAINTENANCE:
-            GroveRGB_SetColor(255, 80, 0);      /* orange */
+            GroveRGB_SetColor(255, 80, 0);
             printf("Mode MAINTENANCE\r\n");
             break;
     }
@@ -78,7 +75,6 @@ void Modes_MettreAJour(void)
             break;
 
         case MODE_ECONOMIQUE:
-            /* Rouge 5 s ramène toujours au standard, jamais en maintenance (choix du livrable 1) */
             if (rouge)
             {
                 Modes_Changer(MODE_STANDARD);
@@ -93,7 +89,6 @@ void Modes_MettreAJour(void)
             break;
 
         case MODE_CONFIGURATION:
-            /* Les boutons ne font rien : on sort seulement après 30 min sans activité */
             if ((HAL_GetTick() - derniere_activite_config_ms) >= CONFIG_INACTIVITE_MS)
             {
                 Modes_Changer(MODE_STANDARD);

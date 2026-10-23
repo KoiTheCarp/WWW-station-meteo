@@ -7,20 +7,18 @@
 #include "parametres.h"
 #include "horloge.h"
 
-extern UART_HandleTypeDef huart2;   /* port série du ST-LINK, créé dans setup.c */
+extern UART_HandleTypeDef huart2;
 
 #define VERSION_PROGRAMME  "1.0"
 #define NUMERO_LOT         "WWW-2026-01"
 
-/* Numéro de build : donné par le script de compilation (-DNUMERO_BUILD=...), sinon 0 */
 #ifndef NUMERO_BUILD
 #define NUMERO_BUILD 0
 #endif
 
-#define TAILLE_FILE     64U     /* caractères reçus en attente de traitement */
+#define TAILLE_FILE     64U
 #define TAILLE_COMMANDE 40U
 
-/* File circulaire : l'interruption écrit au début, la boucle principale lit à la fin */
 static volatile char file[TAILLE_FILE];
 static volatile uint32_t tete = 0U;
 static volatile uint32_t queue = 0U;
@@ -29,7 +27,6 @@ static char commande[TAILLE_COMMANDE];
 static uint32_t longueur = 0U;
 static Mode mode_precedent = MODE_STANDARD;
 
-/* Interruption de l'USART2 : un caractère a été tapé dans la console */
 void USART2_IRQHandler(void)
 {
     USART_TypeDef *uart = huart2.Instance;
@@ -45,7 +42,7 @@ void USART2_IRQHandler(void)
         char c = (char)(uart->RDR & 0xFFU);
         uint32_t suivant = (tete + 1U) % TAILLE_FILE;
 
-        if (suivant != queue)       /* file pleine : le caractère est perdu */
+        if (suivant != queue)
         {
             file[tete] = c;
             tete = suivant;
@@ -74,7 +71,6 @@ static void Console_Aide(void)
     printf("  RESET   VERSION   HELP\r\n");
 }
 
-/* Lit un entier qui doit occuper tout le texte (« 12a » est refusé) */
 static bool Console_LireEntier(const char *texte, int32_t *valeur)
 {
     char *fin;
@@ -166,14 +162,12 @@ static void Console_Parametre(const char *nom, const char *valeur)
         return;
     }
 
-    /* Nom seul : on affiche la valeur actuelle */
     if (valeur == NULL)
     {
         printf("%s = %ld\r\n", Parametres_Nom(id), (long)Parametre(id));
         return;
     }
 
-    /* Livrable 1 : valeur hors domaine = message d'erreur, rien n'est modifié */
     if (!Console_LireEntier(valeur, &nombre) || !Parametres_Modifier(id, nombre))
     {
         int32_t min, max;
@@ -186,7 +180,6 @@ static void Console_Parametre(const char *nom, const char *valeur)
 
 static void Console_Executer(char *texte)
 {
-    /* Majuscules : « log_interval=5 » est accepté aussi */
     for (char *p = texte; *p != '\0'; p++)
     {
         *p = (char)toupper((unsigned char)*p);
@@ -248,13 +241,11 @@ void Console_MettreAJour(Mode mode)
         char c = file[queue];
         queue = (queue + 1U) % TAILLE_FILE;
 
-        /* Hors configuration, on ne fait rien de ce qui est tapé */
         if (mode != MODE_CONFIGURATION)
         {
             continue;
         }
 
-        /* Toute touche compte comme une activité : le compte des 30 min repart à zéro */
         Modes_SignalerActivite();
 
         if (c == '\r' || c == '\n')
@@ -271,16 +262,15 @@ void Console_MettreAJour(Mode mode)
         else if ((c == '\b' || c == 0x7F) && longueur > 0U)
         {
             longueur--;
-            printf("\b \b");        /* efface le caractère à l'écran */
+            printf("\b \b");
         }
         else if (isprint((unsigned char)c) && c != ' ' && longueur < TAILLE_COMMANDE - 1U)
         {
             commande[longueur++] = c;
-            printf("%c", c);        /* écho : la console n'affiche pas ce qu'on tape */
+            printf("%c", c);
         }
     }
 
-    /* printf garde le texte en mémoire jusqu'à la fin de ligne : on force l'affichage de l'écho */
     if (affichage)
     {
         fflush(stdout);

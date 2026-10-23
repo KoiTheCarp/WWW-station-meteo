@@ -8,47 +8,35 @@
 #include "parametres.h"
 #include "board_pins.h"
 
-extern I2C_HandleTypeDef hi2c1;     /* bus I2C créé dans setup.c */
+extern I2C_HandleTypeDef hi2c1;
 
-/* Version debug (MESURES_TEST, voir parametres.h) : LOG_INTERVAL compte en secondes au lieu de minutes */
 #if MESURES_TEST
 #define UNITE_INTERVALLE_MS  1000U
 #else
 #define UNITE_INTERVALLE_MS  (60U * 1000U)
 #endif
 
-/* 2 mesures en timeout d'affilée = capteur en erreur (commande TIMEOUT de la spécification) */
 #define NB_ECHECS_ERREUR  2U
 
-/* Pendant une mesure, un capteur qui n'a pas répondu est réessayé toutes les 100 ms, jusqu'à TIMEOUT */
 #define ESSAI_PERIODE_MS  100U
 
-/* Le GPS envoie une trame par seconde : rien reçu depuis 3 s = il ne répond pas à cet essai */
 #define GPS_SILENCE_MS  3000U
 
-/* Mode maintenance : données affichées en direct, une mesure toutes les 2 s */
 #define MAINTENANCE_PERIODE_MS  2000U
 
-#define LUMIERE_ERREUR  0xFFFFU     /* valeur renvoyée par GroveLight_ReadRaw si la lecture rate */
+#define LUMIERE_ERREUR  0xFFFFU
 
-/*
- * Capteur de lumière débranché : l'entrée A2 « flotte » et suit la dernière tension
- * qu'on lui a imposée. On mesure donc deux fois : après l'avoir mise à 0 V, puis à 3,3 V.
- * Un capteur branché impose sa propre tension : les deux mesures sont proches.
- * Débranché, elles s'écartent (essai du 20/10 : une seule mesure donnait ~900, pas 0).
- */
 #define LUMIERE_ECART_DEBRANCHE  400U
 
-/* Tout ce qu'il faut savoir sur un capteur, regroupé dans une structure */
 typedef struct
 {
     const char *nom;
-    IdParametre parametre_actif;    /* LUMIN, TEMP_AIR, HYGR ou PRESSURE : 0 = capteur désactivé */
+    IdParametre parametre_actif;
     bool actif;
-    float valeur;           /* dernière valeur lue */
-    bool valide;            /* la dernière lecture a-t-elle réussi ? sinon on écrit NA */
-    uint8_t nb_echecs;      /* lectures ratées d'affilée */
-    bool a_seuils;          /* le capteur a-t-il un minimum et un maximum ? */
+    float valeur;
+    bool valide;
+    uint8_t nb_echecs;
+    bool a_seuils;
     float min;
     float max;
 } Capteur;
@@ -62,7 +50,6 @@ enum
     NB_CAPTEURS
 };
 
-/* Les seuils sont recopiés depuis les paramètres à chaque mesure (ils changent en configuration) */
 static Capteur capteurs[NB_CAPTEURS] =
 {
     { "Temperature", P_TEMP_AIR, true, 0.0f, false, 0U, true,  0.0f, 0.0f },
@@ -73,28 +60,22 @@ static Capteur capteurs[NB_CAPTEURS] =
 
 static BME280_Handle bme280;
 
-/* Le GPS donne deux valeurs (latitude, longitude) : il a sa propre structure */
 typedef struct
 {
-    EtatGps etat;           /* résultat de la dernière lecture */
-    bool connue;            /* position valide à la dernière lecture ? (réutilisée en mode économique) */
+    EtatGps etat;
+    bool connue;
     double latitude;
     double longitude;
-    uint8_t nb_echecs;      /* lectures d'affilée où le module était muet */
+    uint8_t nb_echecs;
 } PositionGps;
 
 static PositionGps position = { GPS_MUET, false, 0.0, 0.0, 0U };
-static uint32_t nb_mesures_eco = 0U;   /* pour ne lire le GPS qu'une mesure sur deux en mode économique */
+static uint32_t nb_mesures_eco = 0U;
 
 static RTC_DateTime date_mesure;
 static bool date_valide = false;
 static bool rtc_en_erreur = false;
 
-/*
- * Une mesure dure jusqu'à ce que tout ait répondu, ou au plus TIMEOUT secondes.
- * Entre deux essais, la boucle principale continue (boutons, LED, console) :
- * on n'attend jamais en bloquant.
- */
 typedef struct
 {
     bool en_cours;
@@ -103,7 +84,7 @@ typedef struct
     bool rtc_ok;
     bool bme280_ok;
     bool lumiere_ok;
-    bool gps_fini;          /* le GPS a répondu (avec ou sans position), ou n'est pas lu (éco) */
+    bool gps_fini;
     BME280_Data env;
     uint16_t lumiere;
 } MesureEnCours;
@@ -111,25 +92,23 @@ typedef struct
 static MesureEnCours mesure = { 0 };
 
 static uint32_t derniere_mesure_ms = 0U;
-static bool premiere_mesure = true;     /* la toute première mesure se fait tout de suite */
+static bool premiere_mesure = true;
 static Mode mode_precedent = MODE_CONFIGURATION;
 
 static char ligne[160];
 
 static const char ENTETE[] = "DATE, HEURE, TEMP_AIR_C, HYGR_PCT, PRESSION_HPA, LUMIERE, NIVEAU_LUMIERE, LATITUDE, LONGITUDE\r\n";
 
-/* Valeur lue mais en dehors des seuils : données incohérentes */
 static bool Capteur_HorsSeuils(const Capteur *c)
 {
     return c->actif && c->valide && c->a_seuils && (c->valeur < c->min || c->valeur > c->max);
 }
 
-/* Met à jour un capteur après une lecture, réussie ou non */
 static void Capteur_Noter(Capteur *c, bool reussie, float valeur)
 {
     if (!c->actif)
     {
-        c->valide = false;      /* désactivé en configuration : jamais en erreur */
+        c->valide = false;
         c->nb_echecs = 0U;
     }
     else if (reussie)
@@ -148,7 +127,6 @@ static void Capteur_Noter(Capteur *c, bool reussie, float valeur)
     }
 }
 
-/* Recopie les paramètres réglés en configuration dans les capteurs */
 static void Mesures_AppliquerParametres(void)
 {
     for (int i = 0; i < NB_CAPTEURS; i++)
@@ -161,23 +139,17 @@ static void Mesures_AppliquerParametres(void)
     capteurs[CAPTEUR_PRESSION].max = (float)Parametre(P_PRESSURE_MAX);
 }
 
-/* GPS lu à cette mesure ? Une mesure sur deux seulement en mode économique (spécification) */
 static bool Mesures_GpsALire(Mode mode)
 {
     if (mode == MODE_ECONOMIQUE)
     {
         nb_mesures_eco++;
-        return (nb_mesures_eco % 2U) != 0U;    /* sinon, livrable 1 : on garde la dernière position connue */
+        return (nb_mesures_eco % 2U) != 0U;
     }
-    nb_mesures_eco = 0U;   /* en entrant en mode éco, la première mesure lit le GPS */
+    nb_mesures_eco = 0U;
     return true;
 }
 
-/*
- * Un essai de lecture du GPS. Il a répondu dès qu'il envoie des trames, avec ou sans position.
- * Choix du groupe : sans position (à l'intérieur), on écrit NA sans erreur ; seul un GPS muet
- * jusqu'à TIMEOUT compte comme un échec.
- */
 static void Mesures_EssayerGps(void)
 {
     double latitude, longitude;
@@ -191,17 +163,15 @@ static void Mesures_EssayerGps(void)
     }
     else if (position.etat == GPS_SANS_POSITION)
     {
-        position.connue = false;    /* position perdue : NA, pas l'ancienne position */
+        position.connue = false;
     }
     mesure.gps_fini = (position.etat != GPS_MUET);
 }
 
-/* Mesure la lumière juste après avoir imposé une tension à la broche A2 */
 static uint16_t Mesures_LireLumiereApres(GPIO_PinState tension)
 {
     GPIO_InitTypeDef gpio = {0};
 
-    /* Broche en sortie pendant quelques microsecondes : on lui impose 0 V ou 3,3 V */
     gpio.Pin = LIGHT_GPIO_PIN;
     gpio.Mode = GPIO_MODE_OUTPUT_PP;
     gpio.Pull = GPIO_NOPULL;
@@ -212,7 +182,6 @@ static uint16_t Mesures_LireLumiereApres(GPIO_PinState tension)
     {
     }
 
-    /* Retour en entrée analogique, comme dans GroveLight_Init, puis mesure */
     gpio.Mode = GPIO_MODE_ANALOG_ADC_CONTROL;
     HAL_GPIO_Init(LIGHT_GPIO_PORT, &gpio);
     return GroveLight_ReadRaw();
@@ -232,12 +201,11 @@ static uint16_t Mesures_LireLumiere(void)
                                             : (uint16_t)(apres_0v - apres_3v3);
     if (ecart > LUMIERE_ECART_DEBRANCHE)
     {
-        return LUMIERE_ERREUR;      /* la broche suit la tension imposée : rien n'y est branché */
+        return LUMIERE_ERREUR;
     }
     return (uint16_t)((apres_0v + apres_3v3) / 2U);
 }
 
-/* Début d'une mesure : ce qui est désactivé (ou le GPS sauté en éco) compte comme déjà fait */
 static void Mesures_Commencer(Mode mode)
 {
     Mesures_AppliquerParametres();
@@ -251,7 +219,6 @@ static void Mesures_Commencer(Mode mode)
     mesure.gps_fini = !Mesures_GpsALire(mode);
 }
 
-/* Un essai sur tout ce qui n'a pas encore répondu. Vrai quand tout a répondu */
 static bool Mesures_Essayer(void)
 {
     mesure.dernier_essai_ms = HAL_GetTick();
@@ -263,12 +230,6 @@ static bool Mesures_Essayer(void)
 
     if (!mesure.bme280_ok)
     {
-        /*
-         * BME280_Init avant chaque lecture (environ 15 ms) : si le capteur a été
-         * débranché ou a subi une baisse de tension (carte SD retirée), il repart
-         * avec ses réglages d'usine et l'humidité reste bloquée (essai du 20/10 :
-         * 92,6 % figé). Le réinitialiser à chaque fois évite ce cas.
-         */
         mesure.bme280_ok = BME280_Init(&bme280, &hi2c1) && BME280_Read(&bme280, &mesure.env);
     }
 
@@ -286,13 +247,12 @@ static bool Mesures_Essayer(void)
     return mesure.rtc_ok && mesure.bme280_ok && mesure.lumiere_ok && mesure.gps_fini;
 }
 
-/* Fin de la mesure : ce qui n'a pas répondu avant TIMEOUT vaut NA et compte un échec */
 static void Mesures_Terminer(void)
 {
     mesure.en_cours = false;
 
     date_valide = mesure.rtc_ok;
-    rtc_en_erreur = !mesure.rtc_ok;     /* livrable 1 : RTC muette = erreur tout de suite */
+    rtc_en_erreur = !mesure.rtc_ok;
 
     Capteur_Noter(&capteurs[CAPTEUR_TEMPERATURE], mesure.bme280_ok, mesure.env.temperature_c);
     Capteur_Noter(&capteurs[CAPTEUR_HUMIDITE],    mesure.bme280_ok, mesure.env.humidity_percent);
@@ -312,7 +272,6 @@ static void Mesures_Terminer(void)
     }
 }
 
-/* Ajoute une colonne : OFF si le capteur est désactivé, NA s'il n'a pas répondu */
 static int Mesures_Colonne(char *p, size_t reste, const Capteur *c, const char *format, bool pris_en_compte)
 {
     if (!c->actif)
@@ -326,7 +285,6 @@ static int Mesures_Colonne(char *p, size_t reste, const Capteur *c, const char *
     return snprintf(p, reste, format, c->valeur);
 }
 
-/* Lumière brute du convertisseur (0 à 4095) ramenée sur 0 à 1023 comme LUMIN_LOW et LUMIN_HIGH */
 static const char *Mesures_NiveauLumiere(const Capteur *c)
 {
     if (!c->actif)
@@ -350,7 +308,6 @@ static const char *Mesures_NiveauLumiere(const Capteur *c)
     return "MOYENNE";
 }
 
-/* Spécification : hors de HYGR_MINT..HYGR_MAXT, l'humidité n'est pas prise en compte */
 static bool Mesures_HumiditeOk(void)
 {
     const Capteur *t = &capteurs[CAPTEUR_TEMPERATURE];
@@ -358,7 +315,6 @@ static bool Mesures_HumiditeOk(void)
         || (t->valeur >= (float)Parametre(P_HYGR_MINT) && t->valeur <= (float)Parametre(P_HYGR_MAXT));
 }
 
-/* Met la mesure en forme : une ligne CSV horodatée, une valeur par colonne (livrable 1) */
 static void Mesures_FormaterLigne(void)
 {
     char *p = ligne;
@@ -391,7 +347,6 @@ static void Mesures_FormaterLigne(void)
     n = snprintf(p, reste, ", %s", Mesures_NiveauLumiere(&capteurs[CAPTEUR_LUMIERE]));
     p += n; reste -= (size_t)n;
 
-    /* En mode économique, une mesure sur deux réutilise la dernière position connue */
     if (position.connue && position.etat != GPS_MUET)
     {
         snprintf(p, reste, ", %.5f, %.5f\r\n", position.latitude, position.longitude);
@@ -402,7 +357,6 @@ static void Mesures_FormaterLigne(void)
     }
 }
 
-/* Affiche une valeur sur la console : OFF si le capteur est désactivé, NA s'il n'a pas répondu */
 static void Mesures_AfficherValeur(const Capteur *c, const char *format, bool pris_en_compte)
 {
     if (!c->actif)
@@ -444,7 +398,6 @@ void Mesures_Afficher(void)
         printf(" (%s)", Mesures_NiveauLumiere(&capteurs[CAPTEUR_LUMIERE]));
     }
 
-    /* Même règle que la ligne CSV : en mode économique, la dernière position connue */
     if (position.connue && position.etat != GPS_MUET)
     {
         printf(" | GPS %.5f, %.5f\r\n", position.latitude, position.longitude);
@@ -457,7 +410,6 @@ void Mesures_Afficher(void)
 
 Erreur Mesures_Erreur(void)
 {
-    /* Ordre du tableau Erreur : RTC, GPS, capteur qui ne répond plus, données incohérentes */
     if (rtc_en_erreur)
     {
         return ERREUR_RTC;
@@ -503,23 +455,19 @@ bool Mesures_MettreAJour(Mode mode)
             break;
 
         case MODE_ECONOMIQUE:
-            /* Spécification : LOG_INTERVAL multiplié par 2 en mode économique */
             intervalle_ms = 2U * log_interval * UNITE_INTERVALLE_MS;
             break;
 
         case MODE_MAINTENANCE:
-            /* Spécification : plus d'écriture sur la SD, données en direct sur le port série */
             intervalle_ms = MAINTENANCE_PERIODE_MS;
             break;
 
         default:
-            /* Configuration : acquisition coupée (une mesure commencée est abandonnée) */
             mode_precedent = mode;
             mesure.en_cours = false;
             return false;
     }
 
-    /* En sortant de la configuration, on mesure tout de suite avec les nouveaux réglages */
     if (mode_precedent == MODE_CONFIGURATION)
     {
         premiere_mesure = true;
@@ -528,22 +476,20 @@ bool Mesures_MettreAJour(Mode mode)
 
     if (!mesure.en_cours)
     {
-        /* On compare des durées (et pas des heures) : ça reste juste quand HAL_GetTick repasse à 0 */
         if (!premiere_mesure && (HAL_GetTick() - derniere_mesure_ms) < intervalle_ms)
         {
             return false;
         }
 
         premiere_mesure = false;
-        derniere_mesure_ms = HAL_GetTick();     /* l'intervalle compte depuis le début de la mesure */
+        derniere_mesure_ms = HAL_GetTick();
         Mesures_Commencer(mode);
     }
     else if ((HAL_GetTick() - mesure.dernier_essai_ms) < ESSAI_PERIODE_MS)
     {
-        return false;       /* pas encore l'heure du prochain essai : on rend la main tout de suite */
+        return false;
     }
 
-    /* Tout a répondu, ou TIMEOUT est écoulé : la ligne est prête */
     bool tout_repondu = Mesures_Essayer();
     uint32_t timeout_ms = (uint32_t)Parametre(P_TIMEOUT) * 1000U;
 

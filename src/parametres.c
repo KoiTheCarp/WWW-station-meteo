@@ -3,13 +3,9 @@
 #include "stm32l4xx_hal.h"
 #include "parametres.h"
 
-/*
- * Le STM32L476 n'a pas d'EEPROM : les paramètres sont sauvegardés dans la
- * dernière page de la mémoire Flash (page 255 de la banque 2, 2 Ko), loin du programme.
- */
 #define FLASH_ADRESSE_PARAMETRES  0x080FF800UL
 #define FLASH_PAGE_PARAMETRES     255U
-#define MAGIE                     0x57575731UL     /* « WWW1 » : la page contient bien nos paramètres */
+#define MAGIE                     0x57575731UL
 
 typedef struct
 {
@@ -19,7 +15,6 @@ typedef struct
     int32_t defaut;
 } Definition;
 
-/* Domaines et valeurs par défaut du tableau de la spécification */
 static const Definition definitions[NB_PARAMETRES] =
 {
     [P_LOG_INTERVAL]  = { "LOG_INTERVAL",  1,    1440,    10 },
@@ -39,7 +34,6 @@ static const Definition definitions[NB_PARAMETRES] =
     [P_PRESSURE_MAX]  = { "PRESSURE_MAX",  300,  1100,    1080 },
 };
 
-/* Ce qui est écrit en Flash : un nombre pair de mots de 32 bits (la Flash s'écrit par 64 bits) */
 typedef struct
 {
     uint32_t magie;
@@ -76,7 +70,6 @@ static bool Parametres_Sauvegarder(void)
     HAL_FLASH_Unlock();
     __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
 
-    /* La Flash doit être effacée avant d'être réécrite */
     effacement.TypeErase = FLASH_TYPEERASE_PAGES;
     effacement.Banks = FLASH_BANK_2;
     effacement.Page = FLASH_PAGE_PARAMETRES;
@@ -122,7 +115,6 @@ void Parametres_Init(void)
     }
     else
     {
-        /* Premier démarrage, ou page abîmée : valeurs par défaut */
         Parametres_ValeursParDefaut();
         printf("Parametres : valeurs par defaut\r\n");
     }
@@ -135,7 +127,6 @@ int32_t Parametre(IdParametre id)
 
 bool Parametres_Chercher(const char *nom, IdParametre *id)
 {
-    /* La spécification écrit aussi « LOG_INTERVALL » : on accepte les deux */
     if (strcmp(nom, "LOG_INTERVALL") == 0)
     {
         *id = P_LOG_INTERVAL;

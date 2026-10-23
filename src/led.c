@@ -2,7 +2,7 @@
 #include "led.h"
 #include "grove_rgb.h"
 
-#define PERIODE_CLIGNOTEMENT_MS  1000U  /* fréquence de 1 Hz imposée par la spécification */
+#define PERIODE_CLIGNOTEMENT_MS  1000U
 
 typedef struct
 {
@@ -19,14 +19,12 @@ typedef struct
 #define BLANC   { 255, 255, 255 }
 #define ETEINTE {   0,   0,   0 }
 
-/* Une erreur = une deuxième couleur après le rouge, et la part de la seconde laissée au rouge */
 typedef struct
 {
     Couleur seconde;
     uint32_t duree_rouge_ms;
 } Clignotement;
 
-/* Indexé par Erreur. Durées égales : 500 ms chacune. 2 fois plus long : 333 ms de rouge, 667 ms de l'autre */
 static const Clignotement clignotements[] =
 {
     [ERREUR_RTC]                  = { BLEU,  500U },
@@ -37,7 +35,6 @@ static const Clignotement clignotements[] =
     [ERREUR_SD_ECRITURE]          = { BLANC, 333U },
 };
 
-/* Mêmes couleurs que dans modes.c (tableau du livrable 1) */
 static const Couleur couleurs_modes[] =
 {
     [MODE_STANDARD]      = VERT,
@@ -50,7 +47,6 @@ static Couleur couleur_affichee = ETEINTE;
 static Erreur erreur_precedente = ERREUR_AUCUNE;
 static Mode mode_precedent = MODE_STANDARD;
 
-/* Envoie la couleur seulement si elle change (l'envoi à la LED prend du temps) */
 static void Led_Afficher(Couleur c)
 {
     if (c.r != couleur_affichee.r || c.g != couleur_affichee.g || c.b != couleur_affichee.b)
@@ -62,10 +58,6 @@ static void Led_Afficher(Couleur c)
 
 void Led_MettreAJour(Mode mode, Erreur erreur)
 {
-    /*
-     * modes.c allume lui-même la LED quand le mode change : on ne sait plus
-     * ce qui est affiché, donc on oublie la couleur pour forcer le prochain envoi.
-     */
     if (mode != mode_precedent)
     {
         couleur_affichee = (Couleur)ETEINTE;
@@ -74,7 +66,6 @@ void Led_MettreAJour(Mode mode, Erreur erreur)
 
     if (erreur == ERREUR_AUCUNE)
     {
-        /* Pas d'erreur : couleur fixe du mode (rien n'est renvoyé si elle est déjà affichée) */
         if (erreur_precedente != ERREUR_AUCUNE)
         {
             Led_Afficher(couleurs_modes[mode]);
@@ -83,7 +74,6 @@ void Led_MettreAJour(Mode mode, Erreur erreur)
         return;
     }
 
-    /* Où en est-on dans la seconde ? Début : rouge, fin : l'autre couleur */
     uint32_t instant_ms = HAL_GetTick() % PERIODE_CLIGNOTEMENT_MS;
     const Clignotement *c = &clignotements[erreur];
 
